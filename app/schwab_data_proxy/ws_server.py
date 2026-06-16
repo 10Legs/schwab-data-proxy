@@ -11,7 +11,7 @@ from typing import Dict, Optional, Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from .stream_router import ServiceKey, stream_router
+from .stream_router import stream_router
 
 logger = logging.getLogger(__name__)
 

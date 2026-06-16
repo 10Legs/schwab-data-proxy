@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from cachetools import TTLCache
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 from .schwab_session import session

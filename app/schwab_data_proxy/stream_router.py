@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Set
 
 from .subscription_manager import ServiceKey, SubscriptionManager
 
