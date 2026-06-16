@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 RUN groupadd -r appuser && useradd -r -g appuser -u 10001 appuser
+# Create token volume mount point with correct ownership before switching user.
+# Docker copies this directory into a new named volume on first mount, so
+# appuser can write token.json without root privileges.
+RUN mkdir -p /data && chown appuser:appuser /data
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
