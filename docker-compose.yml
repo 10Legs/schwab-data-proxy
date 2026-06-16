@@ -1,0 +1,33 @@
+version: "3.9"
+
+volumes:
+  schwab-token:
+
+services:
+  init:
+    build: .
+    command: ["python", "/app/bootstrap.py"]
+    stdin_open: true
+    tty: true
+    env_file: .env
+    volumes:
+      - schwab-token:/data
+    restart: "no"
+
+  proxy:
+    build: .
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file: .env
+    volumes:
+      - schwab-token:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

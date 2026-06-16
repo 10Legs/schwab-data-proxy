@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff lint
+        run: ruff check app/
+
+      - name: Run ruff format check
+        run: ruff format --check app/
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: schwab-data-proxy:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  healthcheck:
+    name: Container healthcheck
+    runs-on: ubuntu-latest
+    needs: docker-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t schwab-data-proxy:ci .
+
+      - name: Start container (no Schwab creds — expect 503 /readyz, 200 /healthz)
+        run: |
+          docker run -d \
+            --name sdp-ci \
+            -p 8080:8080 \
+            -e SCHWAB_APP_KEY=ci-placeholder \
+            -e SCHWAB_APP_SECRET=ci-placeholder \
+            -e SCHWAB_CALLBACK_URL=https://127.0.0.1:8182/ \
+            -e SCHWAB_TOKEN_PATH=/tmp/token.json \
+            -e LOG_LEVEL=WARNING \
+            schwab-data-proxy:ci \
+            uvicorn schwab_data_proxy.main:app --host 0.0.0.0 --port 8080 --workers 1 || true
+
+      - name: Wait for process to start
+        run: sleep 5
+
+      - name: Assert /healthz returns 200
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/healthz || echo "000")
+          echo "healthz status: $STATUS"
+          # /healthz must return 200 (liveness — always up while process runs)
+          # /readyz will return 503 (no token) — that is expected in CI
+          [ "$STATUS" = "200" ] || (echo "FAIL: expected 200, got $STATUS" && exit 1)
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs sdp-ci || true
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f sdp-ci || true

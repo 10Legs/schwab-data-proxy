@@ -1,0 +1,6 @@
+schwab-py
+fastapi
+uvicorn[standard]
+pydantic-settings
+cachetools
+httpx
