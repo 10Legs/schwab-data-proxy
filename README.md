@@ -289,6 +289,7 @@ Leave these unset if your Market Data app also has the Trader API product subscr
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `PROXY_API_KEY` | `""` | API key required by downstream clients. Empty = auth disabled |
 | `PORT` | `8080` | HTTP/WebSocket listen port |
 | `CACHE_TTL_SECONDS` | `2` | TTL for REST response cache in seconds |
 | `LOG_LEVEL` | `INFO` | Python logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
@@ -858,6 +859,47 @@ depends_on:
   schwab-data-proxy:
     condition: service_healthy
 ```
+
+## Authentication
+
+The proxy supports optional API key authentication. Set `PROXY_API_KEY` in `.env` to require a key from all downstream clients. Leave it empty (default) to disable auth — appropriate for fully trusted networks or local development.
+
+### REST
+
+Pass the key in the `X-API-Key` header:
+
+```bash
+curl -H "X-API-Key: your-key-here" http://localhost:8080/v1/quotes?symbols=AAPL
+```
+
+```python
+import httpx
+resp = httpx.get(
+    "http://localhost:8080/v1/quotes",
+    params={"symbols": "AAPL"},
+    headers={"X-API-Key": "your-key-here"},
+)
+```
+
+### WebSocket
+
+Pass the key as a query parameter (WebSocket clients cannot reliably set custom headers):
+
+```python
+import websockets
+async with websockets.connect("ws://localhost:8080/stream?api_key=your-key-here") as ws:
+    ...
+```
+
+### Exempt endpoints
+
+`/healthz` and `/readyz` are always exempt — they are used by Docker healthchecks which cannot pass headers.
+
+### Wrong or missing key
+
+REST: `401 {"error": {"code": "UNAUTHORIZED", "message": "Invalid or missing API key"}}`
+
+WebSocket: connection closed immediately with code `4001` before the hello frame is sent.
 
 ## Security notes
 
