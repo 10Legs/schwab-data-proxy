@@ -2,10 +2,15 @@
 .env
 *.env.local
 
-# Token — never commit
+# Tokens — never commit
 token.json
+trader_token.json
 *.token.json
 /data/
+
+# Keys / certs — never commit
+*.pem
+*.key
 
 # Python
 __pycache__/
