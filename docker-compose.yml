@@ -24,6 +24,7 @@ services:
       - schwab-token:/data
     restart: unless-stopped
     healthcheck:
+      # Overrides Dockerfile HEALTHCHECK to extend start_period for multi-service stack startup.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
       interval: 30s
       timeout: 5s
