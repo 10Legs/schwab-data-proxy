@@ -13,6 +13,8 @@ from cachetools import TTLCache
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
+from . import enum_mapping
+from .enum_mapping import UnknownEnumValue
 from .schwab_session import session
 from .settings import settings
 
@@ -57,6 +59,11 @@ async def _cached_call(endpoint: str, params: dict, coroutine_factory) -> JSONRe
 
     try:
         resp = await coroutine_factory()
+    except UnknownEnumValue as exc:
+        # An inbound param could not be mapped to a schwab-py enum — this is a
+        # client error (bad query string), not an upstream failure.
+        logger.warning("Invalid enum param for %s: %s", endpoint, exc)
+        return _error_response("BAD_REQUEST", str(exc), http_status=400)
     except Exception as exc:  # noqa: BLE001
         logger.error("Upstream call failed for %s: %s", endpoint, exc)
         return _error_response("UPSTREAM_ERROR", str(exc))
@@ -126,18 +133,7 @@ async def get_quotes(
     async def call():
         kwargs: dict[str, Any] = {}
         if fields:
-            field_values = []
-            field_map = {
-                "quote": client.Quote.FIELD_QUOTE,
-                "reference": client.Quote.FIELD_REFERENCE,
-                "extended": client.Quote.FIELD_EXTENDED,
-                "fundamental": client.Quote.FIELD_FUNDAMENTAL,
-                "regular": client.Quote.FIELD_REGULAR,
-            }
-            for f in fields.split(","):
-                f = f.strip()
-                if f in field_map:
-                    field_values.append(field_map[f])
+            field_values = enum_mapping.map_quote_fields(client, fields)
             if field_values:
                 kwargs["fields"] = field_values
         return await client.get_quotes(symbol_list, **kwargs)
@@ -199,30 +195,22 @@ async def get_chains(
     async def call():
         kwargs: dict[str, Any] = {"symbol": symbol}
         if contract_type is not None:
-            try:
-                kwargs["contract_type"] = client.Options.ContractType[
-                    contract_type.upper()
-                ]
-            except (KeyError, AttributeError):
-                kwargs["contract_type"] = contract_type
+            kwargs["contract_type"] = enum_mapping.map_contract_type(
+                client, contract_type
+            )
         if strike_count is not None:
             kwargs["strike_count"] = strike_count
         if include_underlying_quote is not None:
             kwargs["include_underlying_quote"] = include_underlying_quote
         if strategy is not None:
-            try:
-                kwargs["strategy"] = client.Options.Strategy[strategy.upper()]
-            except (KeyError, AttributeError):
-                kwargs["strategy"] = strategy
+            kwargs["strategy"] = enum_mapping.map_strategy(client, strategy)
         if interval is not None:
             kwargs["interval"] = interval
         if strike is not None:
             kwargs["strike"] = strike
         if range is not None:
-            try:
-                kwargs["range"] = client.Options.StrikeRange[range.upper()]
-            except (KeyError, AttributeError):
-                kwargs["range"] = range
+            # schwab-py 1.5.1 names this kwarg ``strike_range`` (not ``range``).
+            kwargs["strike_range"] = enum_mapping.map_strike_range(client, range)
         if from_date is not None:
             kwargs["from_date"] = from_date
         if to_date is not None:
@@ -236,17 +224,11 @@ async def get_chains(
         if days_to_expiration is not None:
             kwargs["days_to_expiration"] = days_to_expiration
         if exp_month is not None:
-            try:
-                kwargs["exp_month"] = client.Options.ExpirationMonth[exp_month.upper()]
-            except (KeyError, AttributeError):
-                kwargs["exp_month"] = exp_month
+            kwargs["exp_month"] = enum_mapping.map_expiration_month(client, exp_month)
         if option_type is not None:
-            try:
-                kwargs["option_type"] = client.Options.Type[option_type.upper()]
-            except (KeyError, AttributeError):
-                kwargs["option_type"] = option_type
+            kwargs["option_type"] = enum_mapping.map_option_type(client, option_type)
         if entitlement is not None:
-            kwargs["entitlement"] = entitlement
+            kwargs["entitlement"] = enum_mapping.map_entitlement(client, entitlement)
         return await client.get_option_chain(**kwargs)
 
     return await _cached_call("chains", params, call)
@@ -290,23 +272,17 @@ async def get_pricehistory(
     async def call():
         kwargs: dict[str, Any] = {"symbol": symbol}
         if period_type is not None:
-            try:
-                kwargs["period_type"] = client.PriceHistory.PeriodType[
-                    period_type.upper()
-                ]
-            except (KeyError, AttributeError):
-                kwargs["period_type"] = period_type
+            kwargs["period_type"] = enum_mapping.map_period_type(client, period_type)
         if period is not None:
-            kwargs["period"] = period
+            # schwab-py 1.5.1 enforces PriceHistory.Period (int-valued enum).
+            kwargs["period"] = enum_mapping.map_period(client, period)
         if frequency_type is not None:
-            try:
-                kwargs["frequency_type"] = client.PriceHistory.FrequencyType[
-                    frequency_type.upper()
-                ]
-            except (KeyError, AttributeError):
-                kwargs["frequency_type"] = frequency_type
+            kwargs["frequency_type"] = enum_mapping.map_frequency_type(
+                client, frequency_type
+            )
         if frequency is not None:
-            kwargs["frequency"] = frequency
+            # schwab-py 1.5.1 enforces PriceHistory.Frequency (int-valued enum).
+            kwargs["frequency"] = enum_mapping.map_frequency(client, frequency)
         if start_datetime is not None:
             kwargs["start_datetime"] = start_datetime
         if end_datetime is not None:
@@ -344,12 +320,7 @@ async def get_markets(
         )
 
     async def call():
-        market_enums = []
-        for m in market_list:
-            try:
-                market_enums.append(client.MarketHours.Market[m.upper()])
-            except (KeyError, AttributeError):
-                market_enums.append(m)
+        market_enums = [enum_mapping.map_market(client, m) for m in market_list]
         kwargs: dict[str, Any] = {"markets": market_enums}
         if date:
             kwargs["date"] = date
