@@ -159,20 +159,20 @@ class StreamRouter:
             if add:
                 # Use subs() for initial/reconnect subscriptions, add() for incremental
                 if initial:
-                    await sc.level_one_equities_subs(symbols, fields)
+                    await sc.level_one_equity_subs(symbols, fields=fields)
                 else:
-                    await sc.level_one_equities_add(symbols, fields)
+                    await sc.level_one_equity_add(symbols, fields=fields)
             else:
-                await sc.level_one_equities_unsubs(symbols)
+                await sc.level_one_equity_unsubs(symbols)
         elif service == "LEVELONE_OPTIONS":
             fields = list(OPTIONS_FIELD_MAP.keys())
             if add:
                 if initial:
-                    await sc.level_one_options_subs(symbols, fields)
+                    await sc.level_one_option_subs(symbols, fields=fields)
                 else:
-                    await sc.level_one_options_add(symbols, fields)
+                    await sc.level_one_option_add(symbols, fields=fields)
             else:
-                await sc.level_one_options_unsubs(symbols)
+                await sc.level_one_option_unsubs(symbols)
 
     # ------------------------------------------------------------------
     # Fan-out

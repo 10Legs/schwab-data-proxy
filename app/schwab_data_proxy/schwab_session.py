@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import schwab.auth as schwab_auth
+import schwab.streaming as schwab_streaming
 
 from .settings import settings
 
@@ -82,7 +83,7 @@ class SchwabSession:
         if self._client is None:
             raise RuntimeError("SchwabSession.start() has not been called")
         if self._stream_client is None:
-            self._stream_client = self._client.create_streaming_session()
+            self._stream_client = schwab_streaming.StreamClient(self._client)
         return self._stream_client
 
     def reset_stream_client(self) -> None:
