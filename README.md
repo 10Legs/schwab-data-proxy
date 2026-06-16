@@ -261,6 +261,133 @@ curl http://localhost:8080/readyz
 | `CACHE_TTL_SECONDS` | `2` | TTL for REST response cache |
 | `LOG_LEVEL` | `INFO` | Python logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
+## Connecting Your App
+
+### REST (Python)
+
+No auth headers are required—the proxy holds all Schwab credentials. Use `httpx` or `requests` to make REST calls directly to the proxy endpoints:
+
+```python
+import httpx
+
+PROXY = "http://localhost:8080"
+
+# Quotes
+resp = httpx.get(f"{PROXY}/v1/quotes", params={"symbols": "AAPL,SPY"})
+data = resp.json()["data"]
+
+# Option chain
+resp = httpx.get(f"{PROXY}/v1/chains", params={"symbol": "SPY", "contract_type": "CALL"})
+chains = resp.json()["data"]
+
+# Price history
+resp = httpx.get(f"{PROXY}/v1/pricehistory", params={"symbol": "AAPL", "period_type": "day", "period": 5})
+candles = resp.json()["data"]
+```
+
+### WebSocket streaming (Python)
+
+Connect with `websockets` and maintain a per-symbol state dict to merge delta ticks:
+
+```python
+import asyncio, json
+import websockets
+
+async def main():
+    async with websockets.connect("ws://localhost:8080/stream") as ws:
+        # Wait for hello frame
+        hello = json.loads(await ws.recv())
+        print(f"Connected as {hello['client_id']}")
+
+        # Subscribe to symbols
+        await ws.send(json.dumps({
+            "type": "subscribe",
+            "service": "LEVELONE_EQUITIES",
+            "symbols": ["AAPL", "SPY"],
+            "ref": "sub-1"
+        }))
+
+        # Maintain last-known state (Schwab sends delta ticks)
+        last_known = {}
+
+        async for raw in ws:
+            msg = json.loads(raw)
+            if msg["type"] == "tick":
+                sym = msg["symbol"]
+                last_known.setdefault(sym, {}).update(msg["fields"])
+                bid = last_known[sym].get("bid")
+                ask = last_known[sym].get("ask")
+                print(f"{sym}: bid={bid} ask={ask}")
+
+asyncio.run(main())
+```
+
+**Key point:** Each tick contains only changed fields. Merge every incoming tick into your `last_known` state dict to build a complete snapshot.
+
+### Docker Compose multi-service setup
+
+Wire the proxy as a service dependency using a bridge network and wait for `/readyz`:
+
+```yaml
+networks:
+  schwab-net:
+    driver: bridge
+
+services:
+  schwab-data-proxy:
+    image: ghcr.io/10legs/schwab-data-proxy:latest
+    env_file: .env
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - schwab-token:/data
+    networks:
+      - schwab-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/readyz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  my-app:
+    build: .
+    environment:
+      PROXY_URL: http://schwab-data-proxy:8080
+    networks:
+      - schwab-net
+    depends_on:
+      schwab-data-proxy:
+        condition: service_healthy
+
+volumes:
+  schwab-token:
+```
+
+**Important:** Inside the Docker network, use the service name `schwab-data-proxy` as the hostname (not `localhost`).
+
+### Wait for readiness
+
+Before making requests at startup, poll `/readyz` (it returns 503 until streaming is logged in):
+
+```python
+import time, httpx
+
+def wait_for_proxy(url="http://localhost:8080", timeout=30):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if httpx.get(f"{url}/readyz").status_code == 200:
+                return
+        except httpx.ConnectError:
+            pass
+        time.sleep(1)
+    raise TimeoutError("Proxy did not become ready")
+
+# Usage: call before making any REST or streaming requests
+wait_for_proxy()
+```
+
 ## REST API Reference
 
 All responses use the envelope:
