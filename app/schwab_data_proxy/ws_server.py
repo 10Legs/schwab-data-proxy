@@ -12,6 +12,7 @@ from typing import Dict, Optional, Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from .settings import settings
 from .stream_router import stream_router
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,14 @@ class WSConnection:
 @ws_router.websocket("/stream")
 async def websocket_stream(ws: WebSocket) -> None:
     await ws.accept()
+
+    # Auth check — must happen before any frame is sent
+    if settings.PROXY_API_KEY:
+        api_key = ws.query_params.get("api_key", "")
+        if api_key != settings.PROXY_API_KEY:
+            await ws.close(code=4001, reason="Unauthorized")
+            return
+
     conn = WSConnection(ws)
     stream_router.register(conn)
 

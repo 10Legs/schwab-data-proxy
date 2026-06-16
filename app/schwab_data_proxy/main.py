@@ -11,6 +11,9 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse as StarletteJSONResponse
 
 from .rest_proxy import router as rest_router
 from .schwab_session import session
@@ -72,6 +75,33 @@ async def lifespan(app: FastAPI):
 
 
 # ---------------------------------------------------------------------------
+# API key middleware
+# ---------------------------------------------------------------------------
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    EXEMPT_PATHS = {"/healthz", "/readyz"}
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if not settings.PROXY_API_KEY:
+            return await call_next(request)
+        if request.url.path in self.EXEMPT_PATHS:
+            return await call_next(request)
+        key = request.headers.get("X-API-Key", "")
+        if key != settings.PROXY_API_KEY:
+            return StarletteJSONResponse(
+                status_code=401,
+                content={
+                    "error": {
+                        "code": "UNAUTHORIZED",
+                        "message": "Invalid or missing API key",
+                    }
+                },
+            )
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
 
@@ -81,6 +111,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(APIKeyMiddleware)
 
 # Mount routers
 app.include_router(rest_router)

@@ -79,7 +79,9 @@ async def _trader_call(coro_factory) -> JSONResponse:
         except Exception:
             detail = resp.text
         message = str(detail) if detail else "Invalid request parameters"
-        return _error_response("BAD_REQUEST", message, upstream_status=400, http_status=400)
+        return _error_response(
+            "BAD_REQUEST", message, upstream_status=400, http_status=400
+        )
 
     if resp.status_code == 401:
         return _error_response(
@@ -88,7 +90,10 @@ async def _trader_call(coro_factory) -> JSONResponse:
 
     if resp.status_code == 403:
         return _error_response(
-            "FORBIDDEN", "Insufficient permissions", upstream_status=403, http_status=403
+            "FORBIDDEN",
+            "Insufficient permissions",
+            upstream_status=403,
+            http_status=403,
         )
 
     if resp.status_code == 404:
@@ -189,9 +194,13 @@ async def get_account(
 @trader_router.get("/accounts/{account_hash}/orders")
 async def get_orders(
     account_hash: str = Path(..., description="Schwab account hash"),
-    from_date: Optional[str] = Query(None, description="ISO8601 datetime (default: 60 days ago)"),
+    from_date: Optional[str] = Query(
+        None, description="ISO8601 datetime (default: 60 days ago)"
+    ),
     to_date: Optional[str] = Query(None, description="ISO8601 datetime (default: now)"),
-    max_results: Optional[int] = Query(None, description="Maximum number of orders to return"),
+    max_results: Optional[int] = Query(
+        None, description="Maximum number of orders to return"
+    ),
     status: Optional[str] = Query(None, description="Order status filter"),
 ) -> JSONResponse:
     client = session.trader_client()
@@ -281,8 +290,12 @@ async def get_transactions(
     account_hash: str = Path(..., description="Schwab account hash"),
     types: Optional[str] = Query(None, description="Comma-separated transaction types"),
     symbol: Optional[str] = Query(None, description="Filter by symbol"),
-    start_date: Optional[str] = Query(None, description="ISO8601 datetime (default: 60 days ago)"),
-    end_date: Optional[str] = Query(None, description="ISO8601 datetime (default: now)"),
+    start_date: Optional[str] = Query(
+        None, description="ISO8601 datetime (default: 60 days ago)"
+    ),
+    end_date: Optional[str] = Query(
+        None, description="ISO8601 datetime (default: now)"
+    ),
 ) -> JSONResponse:
     client = session.trader_client()
 

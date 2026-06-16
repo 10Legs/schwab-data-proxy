@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     # Set to true in CI to skip Schwab session init so /healthz is testable
     SCHWAB_SKIP_INIT: bool = False
+    # Set to require X-API-Key header on all requests. Empty = auth disabled.
+    PROXY_API_KEY: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
