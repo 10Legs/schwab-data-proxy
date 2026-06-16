@@ -16,6 +16,7 @@ from .rest_proxy import router as rest_router
 from .schwab_session import session
 from .settings import settings
 from .stream_router import stream_router
+from .trader_proxy import trader_router
 from .ws_server import ws_router
 
 # ---------------------------------------------------------------------------
@@ -83,6 +84,7 @@ app = FastAPI(
 
 # Mount routers
 app.include_router(rest_router)
+app.include_router(trader_router)
 app.include_router(ws_router)
 
 
