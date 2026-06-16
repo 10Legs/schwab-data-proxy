@@ -318,6 +318,40 @@ resp = httpx.get(f"{PROXY}/v1/pricehistory", params={"symbol": "AAPL", "period_t
 candles = resp.json()["data"]
 ```
 
+### Trader API (Python)
+
+Trader endpoints let you manage accounts, orders, and transactions:
+
+```python
+import httpx
+
+PROXY = "http://localhost:8080"
+
+# Get account hash (needed for all trader calls)
+resp = httpx.get(f"{PROXY}/trader/v1/accounts/numbers")
+account_hash = resp.json()["data"][0]["hashValue"]
+
+# Place a market order
+resp = httpx.post(
+    f"{PROXY}/trader/v1/accounts/{account_hash}/orders",
+    json={
+        "orderType": "MARKET",
+        "session": "NORMAL",
+        "duration": "DAY",
+        "orderStrategyType": "SINGLE",
+        "orderLegCollection": [{
+            "instruction": "BUY",
+            "quantity": 1,
+            "instrument": {"symbol": "AAPL", "assetType": "EQUITY"}
+        }]
+    }
+)
+order_id = resp.json()["order_id"]
+
+# Cancel it
+httpx.delete(f"{PROXY}/trader/v1/accounts/{account_hash}/orders/{order_id}")
+```
+
 ### WebSocket streaming (Python)
 
 Connect with `websockets` and maintain a per-symbol state dict to merge delta ticks:
@@ -517,6 +551,134 @@ Returns `200 {"status": "ok"}` always (liveness probe).
 
 Returns `200 {"status": "ready"}` when session started AND streaming logged in.
 Returns `503 {"status": "degraded", "reason": "..."}` otherwise.
+
+## Trader API Reference
+
+Trader endpoints are never cached — every response is fresh from Schwab.
+
+Response envelope (no `cached` field, unlike market data):
+
+```json
+{"data": <payload>, "as_of": "ISO8601"}
+```
+
+Order placement returns 201:
+
+```json
+{"order_id": "12345678", "as_of": "ISO8601"}
+```
+
+Cancel/replace returns 204 with no body.
+
+Error envelope is identical to market data endpoints.
+
+### GET /trader/v1/accounts/numbers
+
+Returns list of `{accountNumber, hashValue}` pairs. The `hashValue` is what all other trader endpoints use as `account_hash`.
+
+```bash
+curl http://localhost:8080/trader/v1/accounts/numbers
+```
+
+### GET /trader/v1/accounts
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `fields` | string | no | Comma-separated: `positions`, `orders` |
+
+```bash
+curl "http://localhost:8080/trader/v1/accounts?fields=positions"
+```
+
+### GET /trader/v1/accounts/{account_hash}
+
+Same `fields` param as above.
+
+```bash
+curl "http://localhost:8080/trader/v1/accounts/ABC123HASH?fields=positions,orders"
+```
+
+### GET /trader/v1/accounts/{account_hash}/orders
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `from_date` | string | no | ISO8601 datetime (default: 60 days ago) |
+| `to_date` | string | no | ISO8601 datetime (default: now) |
+| `max_results` | int | no | Cap on number of results |
+| `status` | string | no | e.g. `FILLED`, `WORKING`, `CANCELED`, `REJECTED` |
+
+```bash
+curl "http://localhost:8080/trader/v1/accounts/ABC123HASH/orders?status=WORKING"
+```
+
+### GET /trader/v1/accounts/{account_hash}/orders/{order_id}
+
+```bash
+curl http://localhost:8080/trader/v1/accounts/ABC123HASH/orders/12345678
+```
+
+### POST /trader/v1/accounts/{account_hash}/orders
+
+Place an order. Body is a Schwab order spec JSON object. Returns `201` with `order_id`.
+
+```bash
+curl -X POST http://localhost:8080/trader/v1/accounts/ABC123HASH/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderType": "MARKET",
+    "session": "NORMAL",
+    "duration": "DAY",
+    "orderStrategyType": "SINGLE",
+    "orderLegCollection": [{
+      "instruction": "BUY",
+      "quantity": 1,
+      "instrument": {"symbol": "AAPL", "assetType": "EQUITY"}
+    }]
+  }'
+```
+
+Response:
+
+```json
+{"order_id": "12345678", "as_of": "2026-06-15T14:30:00.000000+00:00"}
+```
+
+### PUT /trader/v1/accounts/{account_hash}/orders/{order_id}
+
+Replace an existing order. Body is a complete replacement order spec. Returns `204`.
+
+```bash
+curl -X PUT http://localhost:8080/trader/v1/accounts/ABC123HASH/orders/12345678 \
+  -H "Content-Type: application/json" \
+  -d '{"orderType": "LIMIT", "price": 195.00, ...}'
+```
+
+### DELETE /trader/v1/accounts/{account_hash}/orders/{order_id}
+
+Cancel an order. Returns `204`.
+
+```bash
+curl -X DELETE http://localhost:8080/trader/v1/accounts/ABC123HASH/orders/12345678
+```
+
+### GET /trader/v1/accounts/{account_hash}/transactions
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `types` | string | no | Comma-separated: `TRADE`, `DIVIDEND_OR_INTEREST`, `ACH_RECEIPT`, `ACH_DISBURSEMENT`, `CASH_RECEIPT`, `CASH_DISBURSEMENT`, `ELECTRONIC_FUND` |
+| `symbol` | string | no | Filter by symbol |
+| `start_date` | string | no | ISO8601 datetime (default: 60 days ago) |
+| `end_date` | string | no | ISO8601 datetime (default: now) |
+
+```bash
+curl "http://localhost:8080/trader/v1/accounts/ABC123HASH/transactions?types=TRADE&symbol=AAPL"
+```
+
+### GET /trader/v1/accounts/{account_hash}/transactions/{transaction_id}
+
+```bash
+curl http://localhost:8080/trader/v1/accounts/ABC123HASH/transactions/987654321
+```
 
 ## WebSocket Protocol
 
