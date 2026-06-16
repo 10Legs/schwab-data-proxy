@@ -1,4 +1,8 @@
-schwab-py
+# Pinned: the rest_proxy enum mapping (Quote.Fields, PriceHistory.Period/Frequency,
+# Options.*, MarketHours.Market) is validated against this exact version. Do not
+# unpin — schwab-py renames/retypes enum members across releases and silently
+# broke the /v1 endpoints when previously unpinned.
+schwab-py==1.5.1
 fastapi
 uvicorn[standard]
 pydantic-settings

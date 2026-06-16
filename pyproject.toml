@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+# Run from repo root: `app` resolves as a namespace package and `schwab_data_proxy`
+# matches the in-container import path. asyncio_mode=auto lets async test
+# functions run without a per-test decorator.
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+# rest_proxy intentionally shadows the builtin `range` to match the Schwab REST
+# query-param name; that file is reviewed and the shadow is deliberate.
+target-version = "py312"
