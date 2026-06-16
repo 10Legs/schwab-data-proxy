@@ -33,11 +33,14 @@ Schwab OAuth Bootstrap
 
 def _probe_existing_token(app_key: str, app_secret: str, token_path: str) -> bool:
     """
-    Return True if the token file is valid and passes a live REST probe.
-    Return False if the token is missing, corrupt, or the refresh token is dead.
+    Return True if the token file exists and loads without error.
+    We only do a live REST call to detect a dead refresh token (401).
+    Network errors and non-401 HTTP errors are treated as "token probably fine" —
+    a transient network failure inside the init container should not trigger re-auth.
     """
     path = Path(token_path)
     if not path.exists():
+        print(f"[bootstrap] Token file not found at {token_path}", file=sys.stderr)
         return False
 
     try:
@@ -47,32 +50,32 @@ def _probe_existing_token(app_key: str, app_secret: str, token_path: str) -> boo
             app_secret=app_secret,
             asyncio=False,
         )
+        print("[bootstrap] Token file loaded OK", file=sys.stderr)
     except Exception as exc:
         print(f"[bootstrap] Could not load token file: {exc}", file=sys.stderr)
         return False
 
-    # Cheap REST call to force a refresh attempt.
+    # Attempt a live call only to detect a dead refresh token (401).
+    # Any other outcome (network error, 5xx, market closed, etc.) → treat as valid.
     try:
         resp = client.get_quote("SPY")
-    except Exception as exc:
-        print(f"[bootstrap] Token probe request failed: {exc}", file=sys.stderr)
-        return False
-
-    if resp.status_code == 200:
-        return True
-
-    if resp.status_code == 401:
+        if resp.status_code == 401:
+            print(
+                "[bootstrap] Token probe returned 401 — refresh token expired.",
+                file=sys.stderr,
+            )
+            return False
         print(
-            "[bootstrap] Token probe returned 401 — refresh token likely expired.",
+            f"[bootstrap] Token probe returned HTTP {resp.status_code} — token valid.",
             file=sys.stderr,
         )
-        return False
+    except Exception as exc:
+        # Network error, timeout, etc. — assume token is fine; proxy will handle it.
+        print(
+            f"[bootstrap] Token probe request failed ({exc}) — assuming token valid.",
+            file=sys.stderr,
+        )
 
-    # Unexpected status — log but treat as valid; proxy will deal with it.
-    print(
-        f"[bootstrap] Token probe returned HTTP {resp.status_code} — treating token as valid.",
-        file=sys.stderr,
-    )
     return True
 
 
@@ -87,7 +90,17 @@ def main() -> None:
         print("Token valid. Bootstrap complete.")
         sys.exit(0)
 
-    # 2. Interactive re-auth.
+    # 2. Guard: no TTY means we're detached — can't prompt, must fail fast.
+    if not sys.stdin.isatty():
+        print(
+            "[bootstrap] Token is missing or expired and no TTY is available for re-auth.\n"
+            "Run interactively to re-authenticate:\n"
+            "  docker compose run --rm init",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # 3. Interactive re-auth.
     print(BANNER)
 
     try:
