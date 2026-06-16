@@ -80,8 +80,8 @@ def _probe_existing_token(app_key: str, app_secret: str, token_path: str) -> boo
 
 
 def main() -> None:
-    app_key = settings.SCHWAB_DATA_APP_KEY
-    app_secret = settings.SCHWAB_DATA_APP_SECRET
+    app_key = settings.SCHWAB_DATA_CLIENT_ID
+    app_secret = settings.SCHWAB_DATA_CLIENT_SECRET
     token_path = settings.SCHWAB_DATA_TOKEN_PATH
     callback_url = settings.SCHWAB_DATA_CALLBACK_URL
 
@@ -120,9 +120,9 @@ def main() -> None:
         print(f"Market data token written to {token_path}.")
 
     # --- Trader API bootstrap (optional) ---
-    trader_key = settings.SCHWAB_TRADER_APP_KEY
+    trader_key = settings.SCHWAB_TRADER_CLIENT_ID
     if trader_key:
-        trader_secret = settings.SCHWAB_TRADER_APP_SECRET
+        trader_secret = settings.SCHWAB_TRADER_CLIENT_SECRET
         trader_token_path = settings.SCHWAB_TRADER_TOKEN_PATH
         # Use trader-specific callback if set; fall back to data callback.
         trader_callback_url = settings.SCHWAB_TRADER_CALLBACK_URL or callback_url

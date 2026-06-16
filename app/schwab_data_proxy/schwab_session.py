@@ -37,8 +37,8 @@ class SchwabSession:
         try:
             self._client = schwab_auth.client_from_token_file(
                 token_path=str(token_path),
-                api_key=settings.SCHWAB_DATA_APP_KEY,
-                app_secret=settings.SCHWAB_DATA_APP_SECRET,
+                api_key=settings.SCHWAB_DATA_CLIENT_ID,
+                app_secret=settings.SCHWAB_DATA_CLIENT_SECRET,
                 asyncio=True,
             )
             logger.info("SchwabSession started; token loaded from %s", token_path)
@@ -47,14 +47,14 @@ class SchwabSession:
             sys.exit(1)
 
         # Load trader client — dedicated credentials if configured, else fall back.
-        trader_key = settings.SCHWAB_TRADER_APP_KEY
+        trader_key = settings.SCHWAB_TRADER_CLIENT_ID
         trader_token_path = Path(settings.SCHWAB_TRADER_TOKEN_PATH)
         if trader_key and trader_token_path.exists():
             try:
                 self._trader_client = schwab_auth.client_from_token_file(
                     token_path=str(trader_token_path),
                     api_key=trader_key,
-                    app_secret=settings.SCHWAB_TRADER_APP_SECRET,
+                    app_secret=settings.SCHWAB_TRADER_CLIENT_SECRET,
                     asyncio=True,
                 )
                 logger.info(
@@ -71,13 +71,13 @@ class SchwabSession:
         else:
             if trader_key:
                 logger.warning(
-                    "SCHWAB_TRADER_APP_KEY is set but token file %s does not exist — "
+                    "SCHWAB_TRADER_CLIENT_ID is set but token file %s does not exist — "
                     "falling back to main client for streaming",
                     trader_token_path,
                 )
             else:
                 logger.info(
-                    "SCHWAB_TRADER_APP_KEY not set — using main client for streaming"
+                    "SCHWAB_TRADER_CLIENT_ID not set — using main client for streaming"
                 )
             self._trader_client = self._client
 

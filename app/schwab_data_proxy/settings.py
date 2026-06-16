@@ -2,14 +2,14 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    SCHWAB_DATA_APP_KEY: str = ""
-    SCHWAB_DATA_APP_SECRET: str = ""
+    SCHWAB_DATA_CLIENT_ID: str = ""
+    SCHWAB_DATA_CLIENT_SECRET: str = ""
     SCHWAB_DATA_TOKEN_PATH: str = "/data/token.json"
     SCHWAB_DATA_CALLBACK_URL: str = ""
     # Optional — separate Schwab Trader API app credentials.
     # If set, the streaming client uses these instead of the main credentials.
-    SCHWAB_TRADER_APP_KEY: str = ""
-    SCHWAB_TRADER_APP_SECRET: str = ""
+    SCHWAB_TRADER_CLIENT_ID: str = ""
+    SCHWAB_TRADER_CLIENT_SECRET: str = ""
     SCHWAB_TRADER_TOKEN_PATH: str = "/data/trader_token.json"
     SCHWAB_TRADER_CALLBACK_URL: str = ""
     PORT: int = 8080
