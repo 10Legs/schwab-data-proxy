@@ -1,6 +1,7 @@
 """
 StreamRouter — upstream Schwab streaming connection with fan-out to downstream WebSocket clients.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -98,11 +99,19 @@ class StreamRouter:
 
     def register(self, conn: "WSConnection") -> None:
         self._connections.add(conn)
-        logger.info("StreamRouter: client %s registered (%d total)", conn.id, len(self._connections))
+        logger.info(
+            "StreamRouter: client %s registered (%d total)",
+            conn.id,
+            len(self._connections),
+        )
 
     def unregister(self, conn: "WSConnection") -> None:
         self._connections.discard(conn)
-        logger.info("StreamRouter: client %s unregistered (%d total)", conn.id, len(self._connections))
+        logger.info(
+            "StreamRouter: client %s unregistered (%d total)",
+            conn.id,
+            len(self._connections),
+        )
         # Schedule async cleanup (release subscriptions)
         asyncio.create_task(self._release_client(conn))
 
@@ -130,9 +139,13 @@ class StreamRouter:
         try:
             if subscribe:
                 logger.debug("StreamRouter: subscribing %s on %s", subscribe, service)
-                await self._send_subscription(service, list(subscribe), add=True, initial=initial)
+                await self._send_subscription(
+                    service, list(subscribe), add=True, initial=initial
+                )
             if unsubscribe:
-                logger.debug("StreamRouter: unsubscribing %s on %s", unsubscribe, service)
+                logger.debug(
+                    "StreamRouter: unsubscribing %s on %s", unsubscribe, service
+                )
                 await self._send_subscription(service, list(unsubscribe), add=False)
         except Exception as exc:  # noqa: BLE001
             logger.error("StreamRouter.apply error for %s: %s", service, exc)
@@ -263,7 +276,9 @@ class StreamRouter:
             except Exception as exc:  # noqa: BLE001
                 self.stream_ready = False
                 logger.error(
-                    "StreamRouter: stream disconnected (%s); reconnecting in %ds", exc, backoff
+                    "StreamRouter: stream disconnected (%s); reconnecting in %ds",
+                    exc,
+                    backoff,
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)

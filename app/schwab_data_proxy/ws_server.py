@@ -1,6 +1,7 @@
 """
 WebSocket server — per-client connection handler with reader/writer tasks and heartbeat.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -62,19 +63,23 @@ class WSConnection:
             symbols_raw = msg.get("symbols", [])
 
             if service not in ("LEVELONE_EQUITIES", "LEVELONE_OPTIONS"):
-                await self._enqueue_priority({
-                    "type": "error",
-                    "code": "BAD_COMMAND",
-                    "message": f"Unknown service: {service!r}. Must be LEVELONE_EQUITIES or LEVELONE_OPTIONS",
-                })
+                await self._enqueue_priority(
+                    {
+                        "type": "error",
+                        "code": "BAD_COMMAND",
+                        "message": f"Unknown service: {service!r}. Must be LEVELONE_EQUITIES or LEVELONE_OPTIONS",
+                    }
+                )
                 return
 
             if not isinstance(symbols_raw, list) or not symbols_raw:
-                await self._enqueue_priority({
-                    "type": "error",
-                    "code": "BAD_COMMAND",
-                    "message": "symbols must be a non-empty list",
-                })
+                await self._enqueue_priority(
+                    {
+                        "type": "error",
+                        "code": "BAD_COMMAND",
+                        "message": "symbols must be a non-empty list",
+                    }
+                )
                 return
 
             symbols: Set[str] = {str(s).upper() for s in symbols_raw}
@@ -83,33 +88,43 @@ class WSConnection:
                 upstream_new = stream_router.manager.add(self.id, service, symbols)
                 self.subscriptions[service].update(symbols)
                 if upstream_new:
-                    await stream_router.apply(service, subscribe=upstream_new, unsubscribe=set())
-                await self._enqueue_priority({
-                    "type": "ack",
-                    "ref": ref,
-                    "service": service,
-                    "accepted": sorted(symbols),
-                    "rejected": [],
-                })
+                    await stream_router.apply(
+                        service, subscribe=upstream_new, unsubscribe=set()
+                    )
+                await self._enqueue_priority(
+                    {
+                        "type": "ack",
+                        "ref": ref,
+                        "service": service,
+                        "accepted": sorted(symbols),
+                        "rejected": [],
+                    }
+                )
 
             elif cmd == "unsubscribe":
                 upstream_drop = stream_router.manager.remove(self.id, service, symbols)
                 self.subscriptions[service].difference_update(symbols)
                 if upstream_drop:
-                    await stream_router.apply(service, subscribe=set(), unsubscribe=upstream_drop)
-                await self._enqueue_priority({
-                    "type": "ack",
-                    "ref": ref,
-                    "service": service,
-                    "accepted": sorted(symbols),
-                    "rejected": [],
-                })
+                    await stream_router.apply(
+                        service, subscribe=set(), unsubscribe=upstream_drop
+                    )
+                await self._enqueue_priority(
+                    {
+                        "type": "ack",
+                        "ref": ref,
+                        "service": service,
+                        "accepted": sorted(symbols),
+                        "rejected": [],
+                    }
+                )
         else:
-            await self._enqueue_priority({
-                "type": "error",
-                "code": "BAD_COMMAND",
-                "message": f"Unknown command: {cmd!r}",
-            })
+            await self._enqueue_priority(
+                {
+                    "type": "error",
+                    "code": "BAD_COMMAND",
+                    "message": f"Unknown command: {cmd!r}",
+                }
+            )
 
     async def _enqueue_priority(self, frame: dict) -> None:
         """Enqueue ack/error/heartbeat/pong — never dropped, wait if needed."""
@@ -138,7 +153,9 @@ class WSConnection:
         try:
             while True:
                 await asyncio.sleep(HEARTBEAT_INTERVAL)
-                await self._enqueue_priority({"type": "heartbeat", "server_time": _now_iso()})
+                await self._enqueue_priority(
+                    {"type": "heartbeat", "server_time": _now_iso()}
+                )
         except asyncio.CancelledError:
             pass
 
@@ -147,6 +164,7 @@ class WSConnection:
 # WebSocket endpoint
 # ---------------------------------------------------------------------------
 
+
 @ws_router.websocket("/stream")
 async def websocket_stream(ws: WebSocket) -> None:
     await ws.accept()
@@ -154,16 +172,20 @@ async def websocket_stream(ws: WebSocket) -> None:
     stream_router.register(conn)
 
     # Send hello frame
-    await conn.out.put({
-        "type": "hello",
-        "client_id": conn.id,
-        "server_time": _now_iso(),
-        "protocol": 1,
-    })
+    await conn.out.put(
+        {
+            "type": "hello",
+            "client_id": conn.id,
+            "server_time": _now_iso(),
+            "protocol": 1,
+        }
+    )
 
     reader_task = asyncio.create_task(conn.reader(), name=f"ws-reader-{conn.id}")
     writer_task = asyncio.create_task(conn.writer(), name=f"ws-writer-{conn.id}")
-    heartbeat_task = asyncio.create_task(conn.heartbeat(), name=f"ws-heartbeat-{conn.id}")
+    heartbeat_task = asyncio.create_task(
+        conn.heartbeat(), name=f"ws-heartbeat-{conn.id}"
+    )
 
     try:
         done, pending = await asyncio.wait(

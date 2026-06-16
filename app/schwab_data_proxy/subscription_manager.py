@@ -2,6 +2,7 @@
 SubscriptionManager — reference-counted symbol subscriptions per client.
 Thread-safe under asyncio single-thread model (no locks needed).
 """
+
 from __future__ import annotations
 
 from typing import Dict, Literal, Set
@@ -48,7 +49,9 @@ class SubscriptionManager:
 
         return new_upstream
 
-    def remove(self, client_id: str, service: ServiceKey, symbols: Set[str]) -> Set[str]:
+    def remove(
+        self, client_id: str, service: ServiceKey, symbols: Set[str]
+    ) -> Set[str]:
         """
         Remove symbols for a client.
         Returns the set of symbols whose refcount went from 1 → 0

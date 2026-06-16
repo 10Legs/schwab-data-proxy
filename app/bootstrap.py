@@ -7,6 +7,7 @@ missing, corrupt, or the refresh token is expired.
 
 Uses sync schwab-py (asyncio=False) — no event loop required.
 """
+
 import sys
 from pathlib import Path
 

@@ -1,6 +1,7 @@
 """
 schwab-data-proxy — FastAPI application entry point.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,6 +39,7 @@ _background_tasks: list[asyncio.Task] = []
 # Lifespan
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("schwab-data-proxy starting up")
@@ -47,7 +49,9 @@ async def lifespan(app: FastAPI):
 
     # Launch background tasks
     stream_task = asyncio.create_task(stream_router.run(), name="stream-router")
-    refresh_task = asyncio.create_task(session.token_refresh_loop(), name="token-refresh")
+    refresh_task = asyncio.create_task(
+        session.token_refresh_loop(), name="token-refresh"
+    )
     _background_tasks.extend([stream_task, refresh_task])
 
     logger.info("schwab-data-proxy ready")
@@ -80,6 +84,7 @@ app.include_router(ws_router)
 # ---------------------------------------------------------------------------
 # Health / Readiness
 # ---------------------------------------------------------------------------
+
 
 @app.get("/healthz", tags=["ops"])
 async def healthz() -> JSONResponse:

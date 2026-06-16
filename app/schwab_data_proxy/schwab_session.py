@@ -2,6 +2,7 @@
 SchwabSession — wraps schwab-py AsyncClient and StreamClient.
 Token is pre-bootstrapped on disk; no OAuth flow runs inside the container.
 """
+
 from __future__ import annotations
 
 import asyncio

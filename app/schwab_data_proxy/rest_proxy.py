@@ -1,6 +1,7 @@
 """
 REST proxy endpoints — thin pass-through to Schwab API with TTL+LRU cache.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +33,12 @@ def _make_key(endpoint: str, params: dict) -> tuple:
     return (endpoint, frozenset(sorted(params.items())))
 
 
-def _error_response(code: str, message: str, upstream_status: Optional[int] = None, http_status: int = 502) -> JSONResponse:
+def _error_response(
+    code: str,
+    message: str,
+    upstream_status: Optional[int] = None,
+    http_status: int = 502,
+) -> JSONResponse:
     body: dict[str, Any] = {"error": {"code": code, "message": message}}
     if upstream_status is not None:
         body["error"]["upstream_status"] = upstream_status
@@ -56,9 +62,19 @@ async def _cached_call(endpoint: str, params: dict, coroutine_factory) -> JSONRe
         return _error_response("UPSTREAM_ERROR", str(exc))
 
     if resp.status_code == 429:
-        return _error_response("RATE_LIMITED", "Schwab rate limit exceeded", upstream_status=429, http_status=429)
+        return _error_response(
+            "RATE_LIMITED",
+            "Schwab rate limit exceeded",
+            upstream_status=429,
+            http_status=429,
+        )
     if resp.status_code == 400:
-        return _error_response("BAD_REQUEST", "Invalid request parameters", upstream_status=400, http_status=400)
+        return _error_response(
+            "BAD_REQUEST",
+            "Invalid request parameters",
+            upstream_status=400,
+            http_status=400,
+        )
     if resp.status_code != 200:
         return _error_response(
             "UPSTREAM_ERROR",
@@ -84,11 +100,15 @@ async def _cached_call(endpoint: str, params: dict, coroutine_factory) -> JSONRe
 # /v1/quotes
 # ---------------------------------------------------------------------------
 
+
 @router.get("/v1/quotes")
 async def get_quotes(
     request: Request,
     symbols: str = Query(..., description="Comma-separated list of symbols"),
-    fields: Optional[str] = Query(None, description="Comma-separated fields: quote,reference,extended,fundamental,regular"),
+    fields: Optional[str] = Query(
+        None,
+        description="Comma-separated fields: quote,reference,extended,fundamental,regular",
+    ),
 ) -> JSONResponse:
     params = {"symbols": symbols}
     if fields:
@@ -97,7 +117,11 @@ async def get_quotes(
     client = session.client()
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
     if not symbol_list:
-        return _error_response("BAD_REQUEST", "symbols parameter is required and must not be empty", http_status=400)
+        return _error_response(
+            "BAD_REQUEST",
+            "symbols parameter is required and must not be empty",
+            http_status=400,
+        )
 
     async def call():
         kwargs: dict[str, Any] = {}
@@ -125,6 +149,7 @@ async def get_quotes(
 # /v1/chains
 # ---------------------------------------------------------------------------
 
+
 @router.get("/v1/chains")
 async def get_chains(
     symbol: str = Query(...),
@@ -145,25 +170,29 @@ async def get_chains(
     option_type: Optional[str] = Query(None),
     entitlement: Optional[str] = Query(None),
 ) -> JSONResponse:
-    params = {k: v for k, v in {
-        "symbol": symbol,
-        "contract_type": contract_type,
-        "strike_count": strike_count,
-        "include_underlying_quote": include_underlying_quote,
-        "strategy": strategy,
-        "interval": interval,
-        "strike": strike,
-        "range": range,
-        "from_date": from_date,
-        "to_date": to_date,
-        "volatility": volatility,
-        "underlying_price": underlying_price,
-        "interest_rate": interest_rate,
-        "days_to_expiration": days_to_expiration,
-        "exp_month": exp_month,
-        "option_type": option_type,
-        "entitlement": entitlement,
-    }.items() if v is not None}
+    params = {
+        k: v
+        for k, v in {
+            "symbol": symbol,
+            "contract_type": contract_type,
+            "strike_count": strike_count,
+            "include_underlying_quote": include_underlying_quote,
+            "strategy": strategy,
+            "interval": interval,
+            "strike": strike,
+            "range": range,
+            "from_date": from_date,
+            "to_date": to_date,
+            "volatility": volatility,
+            "underlying_price": underlying_price,
+            "interest_rate": interest_rate,
+            "days_to_expiration": days_to_expiration,
+            "exp_month": exp_month,
+            "option_type": option_type,
+            "entitlement": entitlement,
+        }.items()
+        if v is not None
+    }
 
     client = session.client()
 
@@ -171,7 +200,9 @@ async def get_chains(
         kwargs: dict[str, Any] = {"symbol": symbol}
         if contract_type is not None:
             try:
-                kwargs["contract_type"] = client.Options.ContractType[contract_type.upper()]
+                kwargs["contract_type"] = client.Options.ContractType[
+                    contract_type.upper()
+                ]
             except (KeyError, AttributeError):
                 kwargs["contract_type"] = contract_type
         if strike_count is not None:
@@ -225,6 +256,7 @@ async def get_chains(
 # /v1/pricehistory
 # ---------------------------------------------------------------------------
 
+
 @router.get("/v1/pricehistory")
 async def get_pricehistory(
     symbol: str = Query(...),
@@ -237,17 +269,21 @@ async def get_pricehistory(
     need_extended_hours_data: Optional[bool] = Query(None),
     need_previous_close: Optional[bool] = Query(None),
 ) -> JSONResponse:
-    params = {k: v for k, v in {
-        "symbol": symbol,
-        "period_type": period_type,
-        "period": period,
-        "frequency_type": frequency_type,
-        "frequency": frequency,
-        "start_datetime": start_datetime,
-        "end_datetime": end_datetime,
-        "need_extended_hours_data": need_extended_hours_data,
-        "need_previous_close": need_previous_close,
-    }.items() if v is not None}
+    params = {
+        k: v
+        for k, v in {
+            "symbol": symbol,
+            "period_type": period_type,
+            "period": period,
+            "frequency_type": frequency_type,
+            "frequency": frequency,
+            "start_datetime": start_datetime,
+            "end_datetime": end_datetime,
+            "need_extended_hours_data": need_extended_hours_data,
+            "need_previous_close": need_previous_close,
+        }.items()
+        if v is not None
+    }
 
     client = session.client()
 
@@ -255,14 +291,18 @@ async def get_pricehistory(
         kwargs: dict[str, Any] = {"symbol": symbol}
         if period_type is not None:
             try:
-                kwargs["period_type"] = client.PriceHistory.PeriodType[period_type.upper()]
+                kwargs["period_type"] = client.PriceHistory.PeriodType[
+                    period_type.upper()
+                ]
             except (KeyError, AttributeError):
                 kwargs["period_type"] = period_type
         if period is not None:
             kwargs["period"] = period
         if frequency_type is not None:
             try:
-                kwargs["frequency_type"] = client.PriceHistory.FrequencyType[frequency_type.upper()]
+                kwargs["frequency_type"] = client.PriceHistory.FrequencyType[
+                    frequency_type.upper()
+                ]
             except (KeyError, AttributeError):
                 kwargs["frequency_type"] = frequency_type
         if frequency is not None:
@@ -284,9 +324,12 @@ async def get_pricehistory(
 # /v1/markets
 # ---------------------------------------------------------------------------
 
+
 @router.get("/v1/markets")
 async def get_markets(
-    markets: str = Query(..., description="Comma-separated: equity,option,bond,future,forex"),
+    markets: str = Query(
+        ..., description="Comma-separated: equity,option,bond,future,forex"
+    ),
     date: Optional[str] = Query(None, description="ISO date YYYY-MM-DD"),
 ) -> JSONResponse:
     params = {"markets": markets}
@@ -296,7 +339,9 @@ async def get_markets(
     client = session.client()
     market_list = [m.strip() for m in markets.split(",") if m.strip()]
     if not market_list:
-        return _error_response("BAD_REQUEST", "markets parameter is required", http_status=400)
+        return _error_response(
+            "BAD_REQUEST", "markets parameter is required", http_status=400
+        )
 
     async def call():
         market_enums = []
