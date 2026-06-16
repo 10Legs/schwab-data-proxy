@@ -1,14 +1,28 @@
 # schwab-data-proxy
 
-**A standalone Docker service that multiplexes Schwab market data to N downstream consumers over both REST and WebSocket.**
+**A standalone Docker service that multiplexes Schwab market data and real-time streaming to N downstream consumers over REST and WebSocket.**
 
 ## Why this exists
 
 Schwab's OAuth implementation allows only **one registered application per trader account**. This creates a hard constraint: if you want to run GreekSmith (a trading harness) alongside other market-aware tools (dashboards, alert engines, risk monitors), each cannot maintain independent Schwab credentials.
 
-`schwab-data-proxy` solves this by becoming the *single source of truth* for your Schwab connection. The proxy holds the OAuth credential and token lifecycle. All downstream consumers (GreekSmith, dashboards, etc.) connect to the proxy over REST and WebSocket—no Schwab credentials needed in any individual app.
+`schwab-data-proxy` solves this by becoming the *single source of truth* for your Schwab connection. The proxy holds the OAuth credentials and token lifecycle. All downstream consumers (GreekSmith, dashboards, etc.) connect to the proxy over REST and WebSocket — no Schwab credentials needed in any individual app.
 
-The proxy's core capabilities:
+### Schwab API products
+
+Schwab offers two separate API products, each with its own OAuth app credentials:
+
+| Product | Endpoints | Used for |
+|---------|-----------|---------|
+| **Market Data Production** | `/marketdata/v1/*` | Quotes, option chains, price history, market hours |
+| **Trader API – Individual** | `/trader/v1/*` + WebSocket streaming | Real-time L1 streaming (equities, options) |
+
+The proxy supports **one app, two apps, or a mix**:
+
+- **Single app** — If your Schwab app is subscribed to both products, set only the `SCHWAB_DATA_*` vars. The proxy uses the same credentials for REST and streaming.
+- **Two apps** — If you have a dedicated Market Data app and a separate Trader API app (recommended for isolation), set both `SCHWAB_DATA_*` and `SCHWAB_TRADER_*` vars. The proxy uses market data credentials for REST calls and trader credentials for streaming.
+
+### Core capabilities
 
 - **Reference-counted subscriptions**: Upstream symbol subscriptions fire only when the first client requests it (0→1), and drop only when the last client releases it (1→0)
 - **TTL + LRU caching**: REST responses are cached to avoid rate-limit exhaustion
@@ -251,15 +265,34 @@ curl http://localhost:8080/readyz
 
 ## Configuration
 
+### Market Data app (required)
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCHWAB_DATA_CLIENT_ID` | required | Schwab market data app key |
-| `SCHWAB_DATA_CLIENT_SECRET` | required | Schwab market data app secret |
-| `SCHWAB_DATA_CALLBACK_URL` | required | OAuth callback URL registered with Schwab |
-| `SCHWAB_DATA_TOKEN_PATH` | `/data/token.json` | Path to pre-bootstrapped token file inside container |
+| `SCHWAB_DATA_CLIENT_ID` | required | Client ID for your Schwab Market Data app |
+| `SCHWAB_DATA_CLIENT_SECRET` | required | Client secret for your Schwab Market Data app |
+| `SCHWAB_DATA_CALLBACK_URL` | required | OAuth callback URL registered with the Market Data app |
+| `SCHWAB_DATA_TOKEN_PATH` | `/data/token.json` | Token file path inside the container volume |
+
+### Trader API app (optional — required for streaming)
+
+Leave these unset if your Market Data app also has the Trader API product subscribed (single-app mode). Set them if you have a dedicated Trader API app.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SCHWAB_TRADER_CLIENT_ID` | `""` | Client ID for your Schwab Trader API app |
+| `SCHWAB_TRADER_CLIENT_SECRET` | `""` | Client secret for your Schwab Trader API app |
+| `SCHWAB_TRADER_CALLBACK_URL` | `""` | OAuth callback URL registered with the Trader API app (falls back to `SCHWAB_DATA_CALLBACK_URL` if unset) |
+| `SCHWAB_TRADER_TOKEN_PATH` | `/data/trader_token.json` | Trader token file path inside the container volume |
+
+### General
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `PORT` | `8080` | HTTP/WebSocket listen port |
-| `CACHE_TTL_SECONDS` | `2` | TTL for REST response cache |
+| `CACHE_TTL_SECONDS` | `2` | TTL for REST response cache in seconds |
 | `LOG_LEVEL` | `INFO` | Python logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `SCHWAB_SKIP_INIT` | `false` | Skip Schwab session init (CI/test mode only — disables REST and streaming) |
 
 ## Connecting Your App
 
