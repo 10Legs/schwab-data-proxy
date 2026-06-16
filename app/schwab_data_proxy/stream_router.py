@@ -18,52 +18,58 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Field maps: Schwab numeric code → human-readable name
+# Names match LevelOneEquityFields / LevelOneOptionFields enum member names
+# (lowercase snake_case) from schwab-py 1.5.1.
 # ---------------------------------------------------------------------------
 
 EQUITY_FIELD_MAP: Dict[int, str] = {
-    1: "bid",
-    2: "ask",
-    3: "last",
-    4: "bidSize",
-    5: "askSize",
-    8: "volume",
-    9: "lastSize",
-    10: "tradeTime",
-    11: "quoteTime",
-    12: "highPrice",
-    13: "lowPrice",
-    14: "closePrice",
-    24: "netChange",
-    25: "volatility",
-    28: "openInterest",
-    31: "openPrice",
-    48: "netPercentChange",
+    1: "bid_price",
+    2: "ask_price",
+    3: "last_price",
+    4: "bid_size",
+    5: "ask_size",
+    8: "total_volume",
+    9: "last_size",
+    10: "high_price",
+    11: "low_price",
+    12: "close_price",
+    17: "open_price",
+    18: "net_change",
+    29: "regular_market_last_price",
+    31: "regular_market_net_change",
+    33: "mark",
+    34: "quote_time_millis",
+    35: "trade_time_millis",
+    42: "net_change_percent",
+    44: "mark_change",
+    45: "mark_change_percent",
 }
 
 OPTIONS_FIELD_MAP: Dict[int, str] = {
     1: "description",
-    2: "bid",
-    3: "ask",
-    4: "last",
-    5: "highPrice",
-    6: "lowPrice",
-    7: "closePrice",
-    8: "volume",
-    9: "openInterest",
+    2: "bid_price",
+    3: "ask_price",
+    4: "last_price",
+    5: "high_price",
+    6: "low_price",
+    7: "close_price",
+    8: "total_volume",
+    9: "open_interest",
     10: "volatility",
-    19: "delta",
-    20: "gamma",
-    21: "theta",
-    22: "vega",
-    23: "rho",
-    24: "openPrice",
-    25: "netChange",
-    28: "mark",
-    29: "quote_time",
-    30: "trade_time",
-    32: "impliedVolatility",
-    33: "netPercentChange",
-    37: "underlyingPrice",
+    15: "open_price",
+    16: "bid_size",
+    17: "ask_size",
+    19: "net_change",
+    22: "underlying",
+    27: "days_to_expiration",
+    28: "delta",
+    29: "gamma",
+    30: "theta",
+    31: "vega",
+    32: "rho",
+    35: "underlying_price",
+    37: "mark",
+    44: "net_percent_change",
 }
 
 SERVICE_FIELD_MAP: Dict[str, Dict[int, str]] = {
@@ -155,7 +161,7 @@ class StreamRouter:
     ) -> None:
         sc = self._stream_client
         if service == "LEVELONE_EQUITIES":
-            fields = list(EQUITY_FIELD_MAP.keys())
+            fields = [sc.LevelOneEquityFields(k) for k in EQUITY_FIELD_MAP]
             if add:
                 # Use subs() for initial/reconnect subscriptions, add() for incremental
                 if initial:
@@ -165,7 +171,7 @@ class StreamRouter:
             else:
                 await sc.level_one_equity_unsubs(symbols)
         elif service == "LEVELONE_OPTIONS":
-            fields = list(OPTIONS_FIELD_MAP.keys())
+            fields = [sc.LevelOneOptionFields(k) for k in OPTIONS_FIELD_MAP]
             if add:
                 if initial:
                     await sc.level_one_option_subs(symbols, fields=fields)
