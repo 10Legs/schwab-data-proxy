@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 class SchwabSession:
     def __init__(self) -> None:
         self._client = None
+        self._trader_client = None
         self._stream_client = None
 
     async def start(self) -> None:
@@ -44,6 +45,41 @@ class SchwabSession:
         except Exception as exc:  # noqa: BLE001
             logger.critical("Failed to load Schwab token: %s", exc)
             sys.exit(1)
+
+        # Load trader client — dedicated credentials if configured, else fall back.
+        trader_key = settings.SCHWAB_TRADER_APP_KEY
+        trader_token_path = Path(settings.SCHWAB_TRADER_TOKEN_PATH)
+        if trader_key and trader_token_path.exists():
+            try:
+                self._trader_client = schwab_auth.client_from_token_file(
+                    token_path=str(trader_token_path),
+                    api_key=trader_key,
+                    app_secret=settings.SCHWAB_TRADER_APP_SECRET,
+                    asyncio=True,
+                )
+                logger.info(
+                    "SchwabSession: using dedicated trader client (token: %s)",
+                    trader_token_path,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Failed to load trader token (%s) — falling back to main client for streaming: %s",
+                    trader_token_path,
+                    exc,
+                )
+                self._trader_client = self._client
+        else:
+            if trader_key:
+                logger.warning(
+                    "SCHWAB_TRADER_APP_KEY is set but token file %s does not exist — "
+                    "falling back to main client for streaming",
+                    trader_token_path,
+                )
+            else:
+                logger.info(
+                    "SCHWAB_TRADER_APP_KEY not set — using main client for streaming"
+                )
+            self._trader_client = self._client
 
         # Validate token is actually usable (catches dead refresh tokens before
         # the proxy starts serving traffic).
@@ -75,15 +111,22 @@ class SchwabSession:
             raise RuntimeError("SchwabSession.start() has not been called")
         return self._client
 
+    def trader_client(self):
+        """Return the trader AsyncClient (dedicated or main fallback)."""
+        if self._trader_client is None:
+            raise RuntimeError("SchwabSession.start() has not been called")
+        return self._trader_client
+
     def stream_client(self):
         """
-        Lazily construct StreamClient via the AsyncClient session.
+        Lazily construct StreamClient via the trader AsyncClient session.
+        Uses dedicated trader credentials when configured, else falls back to main.
         Must be called after start().
         """
         if self._client is None:
             raise RuntimeError("SchwabSession.start() has not been called")
         if self._stream_client is None:
-            self._stream_client = schwab_streaming.StreamClient(self._client)
+            self._stream_client = schwab_streaming.StreamClient(self.trader_client())
         return self._stream_client
 
     def reset_stream_client(self) -> None:

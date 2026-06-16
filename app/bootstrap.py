@@ -87,38 +87,79 @@ def main() -> None:
 
     # 1. Probe existing token.
     if _probe_existing_token(app_key, app_secret, token_path):
-        print("Token valid. Bootstrap complete.")
-        sys.exit(0)
+        print("Market data token valid.")
+    else:
+        # 2. Guard: no TTY means we're detached — can't prompt, must fail fast.
+        if not sys.stdin.isatty():
+            print(
+                "[bootstrap] Token is missing or expired and no TTY is available for re-auth.\n"
+                "Run interactively to re-authenticate:\n"
+                "  docker compose run --rm init",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
-    # 2. Guard: no TTY means we're detached — can't prompt, must fail fast.
-    if not sys.stdin.isatty():
-        print(
-            "[bootstrap] Token is missing or expired and no TTY is available for re-auth.\n"
-            "Run interactively to re-authenticate:\n"
-            "  docker compose run --rm init",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        # 3. Interactive re-auth for market data.
+        print(BANNER)
 
-    # 3. Interactive re-auth.
-    print(BANNER)
+        try:
+            schwab_auth.client_from_manual_flow(
+                api_key=app_key,
+                app_secret=app_secret,
+                callback_url=callback_url,
+                token_path=token_path,
+                asyncio=False,
+            )
+        except KeyboardInterrupt:
+            print("\n[bootstrap] Aborted by operator.", file=sys.stderr)
+            sys.exit(1)
+        except Exception as exc:
+            print(f"[bootstrap] Authentication failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
-    try:
-        schwab_auth.client_from_manual_flow(
-            api_key=app_key,
-            app_secret=app_secret,
-            callback_url=callback_url,
-            token_path=token_path,
-            asyncio=False,
-        )
-    except KeyboardInterrupt:
-        print("\n[bootstrap] Aborted by operator.", file=sys.stderr)
-        sys.exit(1)
-    except Exception as exc:
-        print(f"[bootstrap] Authentication failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+        print(f"Market data token written to {token_path}.")
 
-    print(f"Token written to {token_path}. Bootstrap complete.")
+    # --- Trader API bootstrap (optional) ---
+    trader_key = settings.SCHWAB_TRADER_APP_KEY
+    if trader_key:
+        trader_secret = settings.SCHWAB_TRADER_APP_SECRET
+        trader_token_path = settings.SCHWAB_TRADER_TOKEN_PATH
+
+        if _probe_existing_token(trader_key, trader_secret, trader_token_path):
+            print("Trader token valid.")
+        else:
+            # Guard: no TTY — can't prompt.
+            if not sys.stdin.isatty():
+                print(
+                    "[bootstrap] Trader token is missing or expired and no TTY is available.\n"
+                    "Run interactively to re-authenticate:\n"
+                    "  docker compose run --rm init",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+            # Interactive re-auth for trader credentials.
+            print("\n--- Trader API Authentication ---")
+            print(BANNER)
+
+            try:
+                schwab_auth.client_from_manual_flow(
+                    api_key=trader_key,
+                    app_secret=trader_secret,
+                    callback_url=callback_url,
+                    token_path=trader_token_path,
+                    asyncio=False,
+                )
+            except KeyboardInterrupt:
+                print("\n[bootstrap] Aborted by operator.", file=sys.stderr)
+                sys.exit(1)
+            except Exception as exc:
+                print(f"[bootstrap] Trader authentication failed: {exc}", file=sys.stderr)
+                sys.exit(1)
+
+            print(f"Trader token written to {trader_token_path}.")
+
+    print("Bootstrap complete.")
     sys.exit(0)
 
 
