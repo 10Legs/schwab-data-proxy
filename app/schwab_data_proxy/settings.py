@@ -8,10 +8,10 @@ class Settings(BaseSettings):
     SCHWAB_DATA_CALLBACK_URL: str = ""
     # Optional — separate Schwab Trader API app credentials.
     # If set, the streaming client uses these instead of the main credentials.
-    # Callback URL is reused from SCHWAB_DATA_CALLBACK_URL.
     SCHWAB_TRADER_APP_KEY: str = ""
     SCHWAB_TRADER_APP_SECRET: str = ""
     SCHWAB_TRADER_TOKEN_PATH: str = "/data/trader_token.json"
+    SCHWAB_TRADER_CALLBACK_URL: str = ""
     PORT: int = 8080
     CACHE_TTL_SECONDS: int = 2
     LOG_LEVEL: str = "INFO"

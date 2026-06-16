@@ -124,6 +124,8 @@ def main() -> None:
     if trader_key:
         trader_secret = settings.SCHWAB_TRADER_APP_SECRET
         trader_token_path = settings.SCHWAB_TRADER_TOKEN_PATH
+        # Use trader-specific callback if set; fall back to data callback.
+        trader_callback_url = settings.SCHWAB_TRADER_CALLBACK_URL or callback_url
 
         if _probe_existing_token(trader_key, trader_secret, trader_token_path):
             print("Trader token valid.")
@@ -146,7 +148,7 @@ def main() -> None:
                 schwab_auth.client_from_manual_flow(
                     api_key=trader_key,
                     app_secret=trader_secret,
-                    callback_url=callback_url,
+                    callback_url=trader_callback_url,
                     token_path=trader_token_path,
                     asyncio=False,
                 )
