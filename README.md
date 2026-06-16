@@ -192,7 +192,7 @@ flowchart TD
 
 ```bash
 cp .env.template .env
-# Fill in SCHWAB_APP_KEY, SCHWAB_APP_SECRET, SCHWAB_CALLBACK_URL
+# Fill in SCHWAB_DATA_APP_KEY, SCHWAB_DATA_APP_SECRET, SCHWAB_DATA_CALLBACK_URL
 docker compose up
 ```
 
@@ -253,10 +253,10 @@ curl http://localhost:8080/readyz
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCHWAB_APP_KEY` | required | Schwab developer app key |
-| `SCHWAB_APP_SECRET` | required | Schwab developer app secret |
-| `SCHWAB_CALLBACK_URL` | required | OAuth callback URL registered with Schwab |
-| `SCHWAB_TOKEN_PATH` | `/data/token.json` | Path to pre-bootstrapped token file inside container |
+| `SCHWAB_DATA_APP_KEY` | required | Schwab market data app key |
+| `SCHWAB_DATA_APP_SECRET` | required | Schwab market data app secret |
+| `SCHWAB_DATA_CALLBACK_URL` | required | OAuth callback URL registered with Schwab |
+| `SCHWAB_DATA_TOKEN_PATH` | `/data/token.json` | Path to pre-bootstrapped token file inside container |
 | `PORT` | `8080` | HTTP/WebSocket listen port |
 | `CACHE_TTL_SECONDS` | `2` | TTL for REST response cache |
 | `LOG_LEVEL` | `INFO` | Python logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |

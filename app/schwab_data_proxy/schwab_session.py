@@ -25,8 +25,8 @@ class SchwabSession:
         self._stream_client = None
 
     async def start(self) -> None:
-        """Load token from SCHWAB_TOKEN_PATH. Fatal if file missing or invalid."""
-        token_path = Path(settings.SCHWAB_TOKEN_PATH)
+        """Load token from SCHWAB_DATA_TOKEN_PATH. Fatal if file missing or invalid."""
+        token_path = Path(settings.SCHWAB_DATA_TOKEN_PATH)
         if not token_path.exists():
             logger.critical(
                 "Token file not found at %s — run the schwab-py auth flow to bootstrap it",
@@ -37,8 +37,8 @@ class SchwabSession:
         try:
             self._client = schwab_auth.client_from_token_file(
                 token_path=str(token_path),
-                api_key=settings.SCHWAB_APP_KEY,
-                app_secret=settings.SCHWAB_APP_SECRET,
+                api_key=settings.SCHWAB_DATA_APP_KEY,
+                app_secret=settings.SCHWAB_DATA_APP_SECRET,
                 asyncio=True,
             )
             logger.info("SchwabSession started; token loaded from %s", token_path)

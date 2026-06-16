@@ -80,10 +80,10 @@ def _probe_existing_token(app_key: str, app_secret: str, token_path: str) -> boo
 
 
 def main() -> None:
-    app_key = settings.SCHWAB_APP_KEY
-    app_secret = settings.SCHWAB_APP_SECRET
-    token_path = settings.SCHWAB_TOKEN_PATH
-    callback_url = settings.SCHWAB_CALLBACK_URL
+    app_key = settings.SCHWAB_DATA_APP_KEY
+    app_secret = settings.SCHWAB_DATA_APP_SECRET
+    token_path = settings.SCHWAB_DATA_TOKEN_PATH
+    callback_url = settings.SCHWAB_DATA_CALLBACK_URL
 
     # 1. Probe existing token.
     if _probe_existing_token(app_key, app_secret, token_path):
