@@ -158,7 +158,7 @@ def main() -> None:
             trader_id,
             trader_secret,
             trader_token_path,
-            probe_fn=lambda c: c.get_user_preference(),
+            probe_fn=lambda c: c.get_account_numbers(),
         ):
             print("[bootstrap] Trader token valid.")
         else:
