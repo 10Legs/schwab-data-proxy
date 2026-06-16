@@ -4,9 +4,9 @@
 
 ## Why this exists
 
-Schwab's OAuth implementation allows only **one registered application per trader account**. This creates a hard constraint: if you want to run GreekSmith (a trading harness) alongside other market-aware tools (dashboards, alert engines, risk monitors), each cannot maintain independent Schwab credentials.
+Schwab's OAuth implementation allows only **one registered application per trader account**. This creates a hard constraint: if you want to run your-trading-app alongside other market-aware tools (dashboards, alert engines, risk monitors), each cannot maintain independent Schwab credentials.
 
-`schwab-data-proxy` solves this by becoming the *single source of truth* for your Schwab connection. The proxy holds the OAuth credentials and token lifecycle. All downstream consumers (GreekSmith, dashboards, etc.) connect to the proxy over REST and WebSocket — no Schwab credentials needed in any individual app.
+`schwab-data-proxy` solves this by becoming the *single source of truth* for your Schwab connection. The proxy holds the OAuth credentials and token lifecycle. All downstream consumers (your-trading-app, dashboards, etc.) connect to the proxy over REST and WebSocket — no Schwab credentials needed in any individual app.
 
 ### Schwab API products
 
@@ -45,19 +45,19 @@ graph LR
         WSServer["WebSocket Server<br/>(N-Client Fan-out)"]
     end
     
-    GreekSmith["GreekSmith<br/>(REST + WS)"]
+    YourApp["your-trading-app<br/>(REST + WS)"]
     Dashboard["Dashboard<br/>(REST + WS)"]
     AlertEngine["Alert Engine<br/>(REST + WS)"]
     
     SchwabRest -->|REST Calls| Session
     Session -->|REST Calls| Cache
-    Cache -->|Cached Quotes,<br/>Chains, History| GreekSmith
+    Cache -->|Cached Quotes,<br/>Chains, History| YourApp
     Cache -->|Cached Data| Dashboard
     Cache -->|Cached Data| AlertEngine
     
     SchwabWS -->|L1 Ticks| StreamRouter
     StreamRouter -->|Normalized Ticks| WSServer
-    WSServer -->|WebSocket Stream| GreekSmith
+    WSServer -->|WebSocket Stream| YourApp
     WSServer -->|WebSocket Stream| Dashboard
     WSServer -->|WebSocket Stream| AlertEngine
     
@@ -73,7 +73,7 @@ REST requests (quotes, chains, price history, market hours) follow a cache-first
 
 ```mermaid
 sequenceDiagram
-    participant Client as Downstream App<br/>(GreekSmith)
+    participant Client as Downstream App
     participant Proxy as REST Endpoint<br/>(FastAPI)
     participant Cache as LRU Cache<br/>(TTL 2s)
     participant Session as SchwabSession<br/>(OAuth)
@@ -168,7 +168,7 @@ flowchart TD
 **Reconnect guarantees:**
 - Per-client queues are **not** cleared on reconnect; clients receive ticks uninterrupted
 - Refcounts are preserved across upstream reconnects
-- If reconnect fails after max retries, `/readyz` returns 503 and GreekSmith containers fail their health checks
+- If reconnect fails after max retries, `/readyz` returns 503 and downstream containers fail their health checks
 
 ## Bootstrap & startup
 
@@ -464,6 +464,8 @@ All responses use the envelope:
 {"data": <schwab payload>, "cached": true|false, "as_of": "2026-06-15T14:30:00.123456+00:00"}
 ```
 
+Invalid enum parameter values (e.g. unknown `period_type` or `contract_type`) return `400` rather than being passed through to Schwab.
+
 Error envelope:
 
 ```json
@@ -496,7 +498,7 @@ Fetch option chain for a single underlying.
 | `strategy` | string | no | `SINGLE`, `ANALYTICAL`, `COVERED`, `VERTICAL`, `CALENDAR`, `STRANGLE`, `STRADDLE`, `BUTTERFLY`, `CONDOR`, `DIAGONAL`, `COLLAR`, `ROLL` |
 | `interval` | float | no | Strike interval |
 | `strike` | float | no | Specific strike price |
-| `range` | string | no | `ITM`, `NTM`, `OTM`, `SAK`, `SBK`, `SNK`, `ALL` |
+| `strike_range` | string | no | `ITM`, `NTM`, `OTM`, `SAK`, `SBK`, `SNK`, `ALL` |
 | `from_date` | string | no | ISO date `YYYY-MM-DD` |
 | `to_date` | string | no | ISO date `YYYY-MM-DD` |
 | `volatility` | float | no | Volatility override for analytical pricing |
@@ -508,7 +510,7 @@ Fetch option chain for a single underlying.
 | `entitlement` | string | no | `PP`, `NP`, `PN` |
 
 ```bash
-curl "http://localhost:8080/v1/chains?symbol=SPY&contract_type=CALL&range=NTM&from_date=2026-06-20&to_date=2026-07-18"
+curl "http://localhost:8080/v1/chains?symbol=SPY&contract_type=CALL&strike_range=NTM&from_date=2026-06-20&to_date=2026-07-18"
 ```
 
 ### GET /v1/pricehistory
@@ -824,35 +826,35 @@ Example: `AAPL  260117C00200000`
 - Side: `C` (call) or `P` (put)
 - Strike × 1000, zero-padded to 8 digits: `00200000` = $200.00
 
-## GreekSmith integration
+## Example: multi-app integration
 
-GreekSmith connects to the proxy for both REST data and live streaming:
+Your downstream app connects to the proxy for both REST data and live streaming:
 
 ```mermaid
 graph LR
-    GreekSmith["GreekSmith<br/>Algo Trading Harness"]
+    YourApp["your-trading-app<br/>(algo trading harness)"]
     
     subgraph Proxy["schwab-data-proxy"]
         REST["/v1/quotes<br/>/v1/chains<br/>/v1/pricehistory"]
         Stream["/stream<br/>WebSocket"]
     end
     
-    GreekSmith -->|REST queries<br/>no auth needed| REST
-    GreekSmith -->|Subscribe/unsubscribe<br/>LEVELONE_EQUITIES<br/>LEVELONE_OPTIONS| Stream
-    REST -->|Cached quotes| GreekSmith
-    Stream -->|L1 ticks| GreekSmith
+    YourApp -->|REST queries<br/>no auth needed| REST
+    YourApp -->|Subscribe/unsubscribe<br/>LEVELONE_EQUITIES<br/>LEVELONE_OPTIONS| Stream
+    REST -->|Cached quotes| YourApp
+    Stream -->|L1 ticks| YourApp
 ```
 
-GreekSmith consumers should:
+Downstream apps should:
 
-1. Point REST calls at `http://localhost:8080/v1/...` — no Schwab credentials needed in GreekSmith
+1. Point REST calls at `http://localhost:8080/v1/...` — no Schwab credentials needed in your-trading-app
 2. Connect the streaming client to `ws://localhost:8080/stream`
 3. Subscribe to `LEVELONE_EQUITIES` for equity scanners and `LEVELONE_OPTIONS` for Greeks feeds
 4. Maintain per-symbol `last_known` state dicts and merge delta ticks
 5. Handle `503` from `/readyz` at startup — retry with backoff before assuming the proxy is healthy
 6. On WebSocket disconnect, re-subscribe all symbols after reconnecting (the proxy does not restore session state)
 
-The proxy's `/readyz` endpoint is appropriate as a Docker dependency healthcheck for GreekSmith containers:
+The proxy's `/readyz` endpoint is appropriate as a Docker dependency healthcheck for downstream containers:
 
 ```yaml
 depends_on:
