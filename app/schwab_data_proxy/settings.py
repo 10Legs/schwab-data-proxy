@@ -2,13 +2,15 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    SCHWAB_APP_KEY: str
-    SCHWAB_APP_SECRET: str
+    SCHWAB_APP_KEY: str = ""
+    SCHWAB_APP_SECRET: str = ""
     SCHWAB_TOKEN_PATH: str = "/data/token.json"
-    SCHWAB_CALLBACK_URL: str
+    SCHWAB_CALLBACK_URL: str = ""
     PORT: int = 8080
     CACHE_TTL_SECONDS: int = 2
     LOG_LEVEL: str = "INFO"
+    # Set to true in CI to skip Schwab session init so /healthz is testable
+    SCHWAB_SKIP_INIT: bool = False
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

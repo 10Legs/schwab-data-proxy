@@ -55,18 +55,14 @@ jobs:
       - name: Build image
         run: docker build -t schwab-data-proxy:ci .
 
-      - name: Start container (no Schwab creds — expect 503 /readyz, 200 /healthz)
+      - name: Start container (SCHWAB_SKIP_INIT=true — liveness test only)
         run: |
           docker run -d \
             --name sdp-ci \
             -p 8080:8080 \
-            -e SCHWAB_APP_KEY=ci-placeholder \
-            -e SCHWAB_APP_SECRET=ci-placeholder \
-            -e SCHWAB_CALLBACK_URL=https://127.0.0.1:8182/ \
-            -e SCHWAB_TOKEN_PATH=/tmp/token.json \
+            -e SCHWAB_SKIP_INIT=true \
             -e LOG_LEVEL=WARNING \
-            schwab-data-proxy:ci \
-            uvicorn schwab_data_proxy.main:app --host 0.0.0.0 --port 8080 --workers 1 || true
+            schwab-data-proxy:ci
 
       - name: Wait for process to start
         run: sleep 5

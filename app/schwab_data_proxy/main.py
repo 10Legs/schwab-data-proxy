@@ -44,15 +44,20 @@ _background_tasks: list[asyncio.Task] = []
 async def lifespan(app: FastAPI):
     logger.info("schwab-data-proxy starting up")
 
-    # Initialize Schwab session (loads token — fatal on failure)
-    await session.start()
+    if settings.SCHWAB_SKIP_INIT:
+        logger.warning(
+            "SCHWAB_SKIP_INIT=true — skipping Schwab session init (CI/test mode)"
+        )
+    else:
+        # Initialize Schwab session (loads token — fatal on failure)
+        await session.start()
 
-    # Launch background tasks
-    stream_task = asyncio.create_task(stream_router.run(), name="stream-router")
-    refresh_task = asyncio.create_task(
-        session.token_refresh_loop(), name="token-refresh"
-    )
-    _background_tasks.extend([stream_task, refresh_task])
+        # Launch background tasks
+        stream_task = asyncio.create_task(stream_router.run(), name="stream-router")
+        refresh_task = asyncio.create_task(
+            session.token_refresh_loop(), name="token-refresh"
+        )
+        _background_tasks.extend([stream_task, refresh_task])
 
     logger.info("schwab-data-proxy ready")
     yield
