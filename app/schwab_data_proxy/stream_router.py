@@ -246,10 +246,14 @@ class StreamRouter:
         for conn in self._connections:
             entry = {
                 "client_id": conn.id,
-                "counts": {svc: len(conn.subscriptions.get(svc, set())) for svc in services},
+                "counts": {
+                    svc: len(conn.subscriptions.get(svc, set())) for svc in services
+                },
             }
             if verbose:
-                entry["symbols"] = {svc: sorted(conn.subscriptions.get(svc, set())) for svc in services}
+                entry["symbols"] = {
+                    svc: sorted(conn.subscriptions.get(svc, set())) for svc in services
+                }
             connections.append(entry)
         upstream = {svc: self.manager.current_union(svc) for svc in services}
         return {
