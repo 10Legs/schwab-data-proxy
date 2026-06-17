@@ -239,6 +239,33 @@ async def get_chains(
 # ---------------------------------------------------------------------------
 
 
+def _parse_datetime_param(value: str) -> datetime:
+    """Convert a start_datetime / end_datetime query-string value to a datetime.
+
+    Accepts:
+    - Epoch milliseconds as an integer string (e.g. "1749945600000")
+    - ISO 8601 string (e.g. "2026-06-16T09:30:00+00:00")
+
+    Returns a timezone-aware UTC datetime suitable for schwab-py.
+    """
+    # Try epoch-ms first (most common path from exo)
+    try:
+        ms = int(value)
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+    except (ValueError, TypeError):
+        pass
+    # Fall back to ISO 8601 parse
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot parse datetime param {value!r}: expected epoch-ms integer or ISO 8601 string"
+        ) from exc
+
+
 @router.get("/v1/pricehistory")
 async def get_pricehistory(
     symbol: str = Query(...),
@@ -284,9 +311,9 @@ async def get_pricehistory(
             # schwab-py 1.5.1 enforces PriceHistory.Frequency (int-valued enum).
             kwargs["frequency"] = enum_mapping.map_frequency(client, frequency)
         if start_datetime is not None:
-            kwargs["start_datetime"] = start_datetime
+            kwargs["start_datetime"] = _parse_datetime_param(start_datetime)
         if end_datetime is not None:
-            kwargs["end_datetime"] = end_datetime
+            kwargs["end_datetime"] = _parse_datetime_param(end_datetime)
         if need_extended_hours_data is not None:
             kwargs["need_extended_hours_data"] = need_extended_hours_data
         if need_previous_close is not None:
