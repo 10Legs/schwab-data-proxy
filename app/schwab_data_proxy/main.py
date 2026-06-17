@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
@@ -128,6 +128,18 @@ app.include_router(ws_router)
 @app.get("/healthz", tags=["ops"])
 async def healthz() -> JSONResponse:
     return JSONResponse(status_code=200, content={"status": "ok"})
+
+
+@app.get("/streams", tags=["ops"])
+async def streams(verbose: bool = Query(default=False)) -> JSONResponse:
+    """
+    Active downstream WS clients and their subscription counts.
+
+    Default: counts only. ?verbose=true adds full sorted symbol lists.
+    NOTE: upstream_union values are ints by default, sorted lists when verbose=true.
+    Branch on the verbose flag you sent, not on the field type.
+    """
+    return JSONResponse(status_code=200, content=stream_router.status(verbose=verbose))
 
 
 @app.get("/readyz", tags=["ops"])
