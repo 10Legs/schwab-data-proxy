@@ -15,6 +15,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse as StarletteJSONResponse
 
+from .log_config import configure_logging
+from .middleware import RequestLoggingMiddleware
 from .rest_proxy import router as rest_router
 from .schwab_session import session
 from .settings import settings
@@ -26,10 +28,7 @@ from .ws_server import ws_router
 # Logging
 # ---------------------------------------------------------------------------
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+configure_logging(settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -113,6 +112,7 @@ app = FastAPI(
 )
 
 app.add_middleware(APIKeyMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Mount routers
 app.include_router(rest_router)
