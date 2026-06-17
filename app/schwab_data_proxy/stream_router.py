@@ -236,6 +236,37 @@ class StreamRouter:
     # Main run loop
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Introspection
+    # ------------------------------------------------------------------
+
+    def status(self, verbose: bool = False) -> dict:
+        services = ("LEVELONE_EQUITIES", "LEVELONE_OPTIONS")
+        connections = []
+        for conn in self._connections:
+            entry = {
+                "client_id": conn.id,
+                "counts": {svc: len(conn.subscriptions.get(svc, set())) for svc in services},
+            }
+            if verbose:
+                entry["symbols"] = {svc: sorted(conn.subscriptions.get(svc, set())) for svc in services}
+            connections.append(entry)
+        upstream = {svc: self.manager.current_union(svc) for svc in services}
+        return {
+            "upstream_ready": self.stream_ready,
+            "client_count": len(self._connections),
+            "connections": connections,
+            "upstream_union": (
+                {svc: sorted(syms) for svc, syms in upstream.items()}
+                if verbose
+                else {svc: len(syms) for svc, syms in upstream.items()}
+            ),
+        }
+
+    # ------------------------------------------------------------------
+    # Main run loop
+    # ------------------------------------------------------------------
+
     async def run(self) -> None:
         """Login, register handlers, run handle_message loop. Reconnect on disconnect."""
         from .schwab_session import session
