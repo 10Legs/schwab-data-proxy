@@ -4,7 +4,8 @@ volumes:
 services:
   init:
     build: .
-    command: ["python", "/app/bootstrap.py"]
+    entrypoint: ["python", "/app/bootstrap.py"]
+    command: []
     stdin_open: true
     tty: true
     env_file: .env

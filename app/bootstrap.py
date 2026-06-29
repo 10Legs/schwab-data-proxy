@@ -8,6 +8,7 @@ missing, corrupt, or the refresh token is expired.
 Uses sync schwab-py (asyncio=False) — no event loop required.
 """
 
+import argparse
 import sys
 from pathlib import Path
 from typing import Callable
@@ -40,8 +41,9 @@ def _probe_existing_token(
 ) -> bool:
     """
     Return True if the token file exists, loads without error, and passes a
-    live probe call.  Only a 401 response triggers re-auth — network errors
-    and non-401 HTTP errors are treated as "token probably fine."
+    live probe call.  A 401 or 400 response triggers re-auth and the token
+    file is deleted.  Network errors and other non-4xx HTTP errors are treated
+    as "token probably fine" and the token file is left intact.
 
     probe_fn: callable(client) -> response.  Defaults to get_quote("SPY")
     (market data endpoint).  Pass get_user_preference for trader clients whose
@@ -62,6 +64,11 @@ def _probe_existing_token(
         print("[bootstrap] Token file loaded OK", file=sys.stderr)
     except Exception as exc:
         print(f"[bootstrap] Could not load token file: {exc}", file=sys.stderr)
+        path.unlink(missing_ok=True)
+        print(
+            f"[bootstrap] Removed invalid token at {token_path}, re-authenticating.",
+            file=sys.stderr,
+        )
         return False
 
     if probe_fn is None:
@@ -69,9 +76,14 @@ def _probe_existing_token(
 
     try:
         resp = probe_fn(client)
-        if resp.status_code == 401:
+        if resp.status_code in (400, 401):
             print(
-                "[bootstrap] Token probe returned 401 — refresh token expired.",
+                f"[bootstrap] Token probe returned {resp.status_code} — refresh token expired.",
+                file=sys.stderr,
+            )
+            path.unlink(missing_ok=True)
+            print(
+                f"[bootstrap] Removed invalid token at {token_path}, re-authenticating.",
                 file=sys.stderr,
             )
             return False
@@ -106,6 +118,9 @@ def _interactive_auth(
         )
         sys.exit(1)
 
+    # Always start clean — remove any stale/partial token before writing a new one.
+    Path(token_path).unlink(missing_ok=True)
+
     print(f"\n--- {label} Authentication ---")
     print(BANNER)
 
@@ -128,13 +143,24 @@ def _interactive_auth(
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Schwab OAuth bootstrap")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip token probe and force interactive re-authentication for all apps.",
+    )
+    args = parser.parse_args()
+
+    if args.force:
+        print("[bootstrap] --force", file=sys.stderr)
+
     # ── Market Data app ──────────────────────────────────────────────────────
     data_id = settings.SCHWAB_DATA_CLIENT_ID
     data_secret = settings.SCHWAB_DATA_CLIENT_SECRET
     data_token_path = settings.SCHWAB_DATA_TOKEN_PATH
     data_callback_url = settings.SCHWAB_DATA_CALLBACK_URL
 
-    if _probe_existing_token(data_id, data_secret, data_token_path):
+    if not args.force and _probe_existing_token(data_id, data_secret, data_token_path):
         print("[bootstrap] Market data token valid.")
     else:
         _interactive_auth(
@@ -154,7 +180,7 @@ def main() -> None:
 
         # Probe with a trader endpoint — get_quote is market data scope and
         # would 401 on a trader-only app, causing a false re-auth loop.
-        if _probe_existing_token(
+        if not args.force and _probe_existing_token(
             trader_id,
             trader_secret,
             trader_token_path,
