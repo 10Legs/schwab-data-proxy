@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from authlib.integrations.base_client.errors import OAuthError
 
 import app.bootstrap as bootstrap
 
@@ -332,4 +333,120 @@ def test_probe_corrupt_logs_exact_removal_message(tmp_path, capsys):
     expected_fragment = f"[bootstrap] Removed invalid token at {token_file}, re-authenticating."
     assert expected_fragment in captured.err, (
         f"Expected stderr to contain:\n  {expected_fragment!r}\nGot:\n  {captured.err!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# REGRESSION: probe raises OAuthError (invalid_grant) — token deleted, False
+# ---------------------------------------------------------------------------
+
+def test_probe_oauth_invalid_grant_deletes_and_returns_false(tmp_path, capsys):
+    """
+    Simulates the live failure mode: authlib raises OAuthError instead of
+    returning a response object when the refresh token is expired/revoked.
+    The probe must delete the token and return False (→ re-auth), NOT silently
+    assume the token is valid.
+    """
+    token_file = tmp_path / "token.json"
+    _write_token(token_file)
+
+    # Exact OAuthError raised by authlib when the token endpoint returns
+    # HTTP 400 invalid_grant — matches the live repro message.
+    oauth_exc = OAuthError(
+        error="unsupported_token_type",
+        description=(
+            '400 Bad Request: {"error_description":"Refresh token is invalid,'
+            ' expired or revoked","error":"invalid_grant"}'
+        ),
+    )
+    mock_client = MagicMock()
+    mock_client.get_quote.side_effect = oauth_exc
+
+    with patch("app.bootstrap.schwab_auth.client_from_token_file", return_value=mock_client):
+        result = bootstrap._probe_existing_token(
+            client_id="id",
+            client_secret="secret",
+            token_path=str(token_file),
+        )
+
+    assert result is False, "OAuthError / invalid_grant must return False"
+    assert not token_file.exists(), "Token file must be deleted on OAuth auth failure"
+
+    captured = capsys.readouterr()
+    assert "[bootstrap] Removed invalid token at" in captured.err
+    assert "re-authenticating." in captured.err
+
+
+# ---------------------------------------------------------------------------
+# REGRESSION: probe raises genuine network error — token kept, True returned
+# ---------------------------------------------------------------------------
+
+def test_probe_transport_error_keeps_file_and_returns_true(tmp_path):
+    """
+    A genuine network error (e.g. httpx.ConnectError or Python ConnectionError)
+    must NOT delete the token.  A Schwab outage must not nuke a valid credential.
+    """
+    import httpx
+
+    token_file = tmp_path / "token.json"
+    _write_token(token_file)
+
+    mock_client = MagicMock()
+    mock_client.get_quote.side_effect = httpx.ConnectError("Connection refused")
+
+    with patch("app.bootstrap.schwab_auth.client_from_token_file", return_value=mock_client):
+        result = bootstrap._probe_existing_token(
+            client_id="id",
+            client_secret="secret",
+            token_path=str(token_file),
+        )
+
+    assert result is True, "Network error must return True (assume token valid)"
+    assert token_file.exists(), "Token file must NOT be deleted on network error"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _is_auth_failure helper
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("exc,expected", [
+    # OAuthError with invalid_grant → True (primary signal)
+    (
+        OAuthError("unsupported_token_type", '400 Bad Request: {"error":"invalid_grant"}'),
+        True,
+    ),
+    # OAuthError with bare invalid_grant → True
+    (
+        OAuthError("invalid_grant", "Refresh token is invalid, expired or revoked"),
+        True,
+    ),
+    # Plain Exception with invalid_grant in message → True (string fallback)
+    (
+        Exception("unsupported_token_type: 400 Bad Request: invalid_grant"),
+        True,
+    ),
+    # Plain Exception with 400 bad request → True (string fallback)
+    (
+        Exception("400 Bad Request: something auth-related"),
+        True,
+    ),
+    # Python ConnectionError → False (network, not auth)
+    (
+        ConnectionError("Connection refused"),
+        False,
+    ),
+    # Python TimeoutError → False
+    (
+        TimeoutError("timed out"),
+        False,
+    ),
+    # Generic 503 service unavailable → False
+    (
+        Exception("503 Service Unavailable"),
+        False,
+    ),
+])
+def test_is_auth_failure_helper(exc, expected):
+    assert bootstrap._is_auth_failure(exc) is expected, (
+        f"_is_auth_failure({exc!r}) should be {expected}"
     )

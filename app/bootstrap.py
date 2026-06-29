@@ -15,9 +15,47 @@ from typing import Callable
 
 import schwab.auth as schwab_auth
 
+try:
+    from authlib.integrations.base_client.errors import OAuthError as _OAuthError
+except ImportError:  # pragma: no cover — authlib is always present via schwab-py
+    _OAuthError = None
+
 # Import settings from the installed package (schwab_data_proxy is on PYTHONPATH
 # because Dockerfile COPYs app/ into /app/).
 from schwab_data_proxy.settings import settings
+
+_AUTH_FAILURE_SIGNALS = (
+    "invalid_grant",
+    "unsupported_token_type",
+    "refresh token is invalid",
+    "400 bad request",
+    "401",
+)
+
+
+def _is_auth_failure(exc: Exception) -> bool:
+    """Return True if *exc* signals an expired, invalid, or revoked refresh
+    token (or a 400/401 from the token endpoint).
+
+    Distinguishes an OAuth credential failure from a transient network error:
+    - authlib raises ``OAuthError`` when the token-endpoint POST returns an
+      error body — this is the primary and most reliable signal.
+    - String scanning against known OAuth / HTTP-4xx phrases covers wrapped
+      exceptions and future authlib internals.
+
+    Returns False for network-level errors (connection refused, timeout, DNS,
+    5xx) so that a Schwab outage does not delete a valid token.
+    """
+    # Primary: authlib raises OAuthError for all token-endpoint failures.
+    # This is structurally distinct from httpx.TransportError (network errors).
+    if _OAuthError is not None and isinstance(exc, _OAuthError):
+        return True
+
+    # Fallback: string-scan for known OAuth / HTTP-4xx signals in case the
+    # exception is wrapped or raised by a different layer.
+    exc_text = (str(exc) + " " + getattr(exc, "error", "")).lower()
+    return any(sig in exc_text for sig in _AUTH_FAILURE_SIGNALS)
+
 
 BANNER = """
 ─────────────────────────────────────────────
@@ -92,7 +130,23 @@ def _probe_existing_token(
             file=sys.stderr,
         )
     except Exception as exc:
-        # Network error, timeout, etc. — assume token is fine; proxy will handle it.
+        if _is_auth_failure(exc):
+            # The token endpoint rejected our refresh token (expired/revoked/invalid).
+            # authlib raised an exception instead of returning a response object,
+            # so the status_code branch above never fires.  Delete the stale token
+            # so the caller falls through to interactive re-auth.
+            print(
+                f"[bootstrap] Token probe request failed ({exc}) — refresh token invalid.",
+                file=sys.stderr,
+            )
+            path.unlink(missing_ok=True)
+            print(
+                f"[bootstrap] Removed invalid token at {token_path}, re-authenticating.",
+                file=sys.stderr,
+            )
+            return False
+        # Genuine network error (connection refused, timeout, DNS, 5xx, no internet).
+        # Do NOT delete the token — a Schwab outage must not nuke a valid credential.
         print(
             f"[bootstrap] Token probe request failed ({exc}) — assuming token valid.",
             file=sys.stderr,
